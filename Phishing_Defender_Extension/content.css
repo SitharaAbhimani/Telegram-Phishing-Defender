@@ -1,0 +1,47 @@
+/* Styling for our custom AI tags injected into Telegram */
+.ai-defender-tag {
+    display: inline-block;
+    padding: 2px 6px;
+    margin-left: 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: bold;
+    color: white;
+    vertical-align: middle;
+}
+
+.ai-safe {
+    background-color: #27ae60;
+}
+
+.ai-phish {
+    background-color: #e74c3c;
+    animation: pulse 1.5s infinite;
+}
+
+.ai-loading {
+    background-color: #95a5a6;
+}
+
+@keyframes pulse {
+    0% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.7;
+    }
+
+    100% {
+        opacity: 1;
+    }
+}
+
+/* Hide Telegram Link Preview  */
+.web-page,
+.WebPage,
+.MessageMedia,
+.message-media,
+.link-preview {
+    display: none !important;
+}

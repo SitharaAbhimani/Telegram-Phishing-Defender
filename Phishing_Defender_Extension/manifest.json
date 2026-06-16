@@ -1,0 +1,38 @@
+{
+    "manifest_version": 3,
+    "name": "Telegram Web Phishing Defender",
+    "version": "1.0",
+    "description": "Auto-scans URLs and Voice messages natively inside Telegram Web.",
+    "permissions": [
+        "storage",
+        "offscreen"
+    ],
+    "host_permissions": [
+        "*://web.telegram.org/*"
+    ],
+    "background": {
+        "service_worker": "background.js"
+    },
+    "sandbox": {
+        "pages": [
+            "sandbox.html"
+        ]
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "*://web.telegram.org/*"
+            ],
+            "js": [
+                "content.js"
+            ],
+            "css": [
+                "content.css"
+            ],
+            "run_at": "document_idle"
+        }
+    ],
+    "content_security_policy": {
+        "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+    }
+}
