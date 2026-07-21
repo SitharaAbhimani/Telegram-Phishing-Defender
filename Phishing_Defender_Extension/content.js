@@ -2,45 +2,46 @@
 
 console.log("🛡️ AI Phishing Defender active on Telegram Web!");
 
-// 1. Function to find and scan URLs in the chat
+// ======================================================================
+// 1. URL SCANNER IN TELEGRAM
+// ======================================================================
 function scanTelegramLinks() {
     const links = document.querySelectorAll('a[href^="http"]:not(.ai-scanned)');
 
     links.forEach(link => {
         link.classList.add('ai-scanned');
 
-
         if (!link.innerText.trim()) return;
 
-        // 2. Telegram web has specific containers for web page previews.
-        if (link.closest('.web-page') || link.closest('.WebPage') || link.closest('.MessageMedia') || link.closest('.message-media') || link.closest('.link-preview')) {
+        if (link.querySelector('img') ||
+            link.querySelector('div') ||
+            link.closest('.WebPage') ||
+            link.closest('.web-page') ||
+            link.closest('.LinkPreview') ||
+            link.closest('.link-preview-wrapper') ||
+            link.closest('.message-media') ||
+            link.closest('.is-webpage')) {
             return;
         }
 
         const url = link.href;
-
-        // Create a loading tag next to the link
         const tag = document.createElement('span');
         tag.className = 'ai-defender-tag ai-loading';
-        tag.innerText = 'AI Scanning...';
+        tag.innerText = '⏳ Loading...';
         link.parentNode.insertBefore(tag, link.nextSibling);
 
-        // Send URL to our AI model in background.js
         chrome.runtime.sendMessage({ action: "check_url", url: url }, (response) => {
             if (chrome.runtime.lastError || !response) {
                 tag.style.display = 'none';
                 return;
             }
 
-            // Update the tag based on AI response
             if (response.status === "SAFE") {
                 tag.className = 'ai-defender-tag ai-safe';
                 tag.innerText = `✅ Safe`;
             } else if (response.status === "PHISHING") {
                 tag.className = 'ai-defender-tag ai-phish';
                 tag.innerText = `🚨 Phishing`;
-                link.style.color = '#e74c3c';
-                link.style.textDecoration = 'line-through';
             } else if (response.status === "LOADING") {
                 tag.className = 'ai-defender-tag ai-loading';
                 tag.innerText = `⏳ Loading...`;
@@ -48,39 +49,24 @@ function scanTelegramLinks() {
                     tag.remove();
                     link.classList.remove('ai-scanned');
                 }, 2000);
+            } else {
+                tag.style.display = 'none';
             }
         });
     });
 }
 
-// 2. Use a MutationObserver to constantly watch for NEW messages/links appearing
-const observer = new MutationObserver((mutations) => {
-    // Throttle the scanning slightly to not lag Telegram
-    clearTimeout(window.scanTimeout);
-    window.scanTimeout = setTimeout(scanTelegramLinks, 500);
-});
-
-// Start observing the whole body for new chat messages
-observer.observe(document.body, { childList: true, subtree: true });
-
-// Run once immediately
-scanTelegramLinks();
-
-
-// 3. VOICE MESSAGE SCANNER IN TELEGRAM
+// ======================================================================
+// 2. VOICE MESSAGE SCANNER IN TELEGRAM
 // ======================================================================
 function scanTelegramVoiceMessages() {
-    // Telegram web uses specific classes for voice messages. 
-    // We look for audio elements or voice message containers.
-    // 'audio' tag or divs with 'voice'/'audio' in their class name.
-    const voiceContainers = document.querySelectorAll('.audio, .voice-message, audio');
+    // 🔥 Added '.media-document', '.document', '.File' to catch audio files sent as documents
+    const voiceContainers = document.querySelectorAll('.audio, .voice-message, audio, .document-audio, .message-document, .media-audio, .media-document, .document, .File');
 
     voiceContainers.forEach(container => {
-        // Prevent adding multiple buttons to the same message
         if (container.classList.contains('ai-voice-scanned')) return;
         container.classList.add('ai-voice-scanned');
 
-        // Create our Custom AI Scan Button
         const scanBtn = document.createElement('button');
         scanBtn.innerText = '🎤 AI Scan';
         scanBtn.className = 'ai-defender-tag';
@@ -88,51 +74,37 @@ function scanTelegramVoiceMessages() {
         scanBtn.style.border = 'none';
         scanBtn.style.cursor = 'pointer';
         scanBtn.style.marginTop = '5px';
+        scanBtn.style.padding = '5px 10px';
+        scanBtn.style.borderRadius = '5px';
+        scanBtn.style.color = 'white';
+        scanBtn.style.fontWeight = 'bold';
+        scanBtn.style.display = 'block'; // Ensure it goes to a new line
 
-        // Insert the button near the voice message
-        container.parentNode.insertBefore(scanBtn, container.nextSibling);
+        if (container.parentNode) {
+            container.parentNode.insertBefore(scanBtn, container.nextSibling);
+        }
 
-        // When the user clicks "AI Scan"
         scanBtn.addEventListener('click', (e) => {
             e.preventDefault();
-            scanBtn.innerText = 'Listening (7s)...';
+            scanBtn.innerText = 'Listening... Play Audio! (7s)';
             scanBtn.style.backgroundColor = '#95a5a6';
 
-            // Tell background.js to start the hidden mic recording
             chrome.runtime.sendMessage({ action: "start_voice_scan" });
         });
     });
 }
 
-// Add voice scanning to our existing MutationObserver
-const originalScan = window.scanTimeout;
-const observerVoice = new MutationObserver((mutations) => {
-    clearTimeout(window.scanTimeoutVoice);
-    window.scanTimeoutVoice = setTimeout(() => {
-        scanTelegramLinks();         // From previous step
-        scanTelegramVoiceMessages(); // New Voice step
-    }, 500);
-});
-
-// Start observing
-observerVoice.observe(document.body, { childList: true, subtree: true });
-scanTelegramVoiceMessages();
-
-// ======================================================================
-// 4. LISTEN FOR VOICE RESULTS FROM BACKGROUND
-// ======================================================================
+// Listen for the final voice analysis results
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "voice_result_ready") {
-        // Find the button that is currently "Listening" to update it
-        // (In a perfect app, we'd use specific IDs, but this works for demonstration)
         const activeBtns = document.querySelectorAll('.ai-defender-tag');
         activeBtns.forEach(btn => {
             if (btn.innerText.includes('Listening')) {
                 if (request.status === "SAFE") {
-                    btn.innerText = `✅ Safe Voice (${request.confidence.toFixed(1)}%)`;
+                    btn.innerText = `✅ Safe Voice`;
                     btn.style.backgroundColor = '#27ae60';
                 } else if (request.status === "PHISHING") {
-                    btn.innerText = `🚨 PHISHING SCAM (${request.confidence.toFixed(1)}%)`;
+                    btn.innerText = `🚨 Phishing Scam!`;
                     btn.style.backgroundColor = '#e74c3c';
                 }
             }
@@ -141,42 +113,96 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 // ======================================================================
-// 5. QR CODE IMAGE SCANNER IN TELEGRAM
+// 3. QR CODE IMAGE SCANNER (Final UI with Decoded URL Display)
 // ======================================================================
 function scanTelegramImagesForQR() {
-    // Find images in the chat
     const images = document.querySelectorAll('img:not(.ai-qr-scanned)');
 
     images.forEach(img => {
+        if (img.width < 50) return;
         img.classList.add('ai-qr-scanned');
 
-        // When an image loads, send its source to background.js to decode
-        img.onload = () => {
-            chrome.runtime.sendMessage({
-                action: "decode_and_check_qr",
-                imageUrl: img.src
-            }, (response) => {
-                if (response && response.status === "PHISHING") {
-                    img.style.border = "5px solid #e74c3c"; // Red border for danger
-                    img.style.filter = "blur(5px)"; // Blur the malicious QR
+        const attemptScan = async () => {
+            try {
+                const response = await fetch(img.src);
+                const blob = await response.blob();
+                const base64Data = await new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result);
+                    reader.readAsDataURL(blob);
+                });
 
-                    const warning = document.createElement('div');
-                    warning.className = 'ai-defender-tag ai-phish';
-                    warning.innerText = `🚨 PHISHING QR DETECTED (${response.confidence.toFixed(1)}%)`;
-                    img.parentNode.insertBefore(warning, img);
-                }
-            });
+                chrome.runtime.sendMessage({ action: "decode_and_check_qr", imageUrl: base64Data }, (res) => {
+                    if (chrome.runtime.lastError || !res || res.status === "NO_QR") return;
+
+                    const tag = document.createElement('div');
+                    tag.style.position = 'absolute';
+                    tag.style.top = '10px';
+                    tag.style.left = '10px';
+                    tag.style.zIndex = '2147483647';
+                    tag.style.padding = '8px 15px';
+                    tag.style.borderRadius = '8px';
+                    tag.style.fontWeight = 'bold';
+                    tag.style.color = 'white';
+                    tag.style.boxShadow = '0px 4px 10px rgba(0,0,0,0.6)';
+                    tag.style.pointerEvents = 'none';
+                    tag.style.fontSize = '14px';
+                    tag.style.fontFamily = 'Arial, sans-serif';
+                    tag.style.whiteSpace = 'nowrap';
+                    tag.style.lineHeight = 'normal';
+                    tag.className = 'ai-defender-qr-tag';
+
+                    const parent = img.parentElement;
+                    if (parent) {
+                        parent.style.position = 'relative';
+
+                        // Format the extracted URL to show inside the tag
+                        let displayUrl = res.url ? res.url : "Scanned Link";
+                        if (displayUrl.length > 30) displayUrl = displayUrl.substring(0, 30) + '...';
+
+                        if (res.status === "PHISHING") {
+                            img.style.border = "5px solid #e74c3c";
+                            img.style.filter = "blur(5px)";
+                            tag.style.backgroundColor = '#e74c3c';
+                            tag.innerHTML = `🚨 Phishing QR!<br><span style="font-size:11px; font-weight:normal; opacity:0.9;">${displayUrl}</span>`;
+                        } else if (res.status === "SAFE") {
+                            img.style.border = "5px solid #27ae60";
+                            tag.style.backgroundColor = '#27ae60';
+                            tag.innerHTML = `✅ Safe QR<br><span style="font-size:11px; font-weight:normal; opacity:0.9;">${displayUrl}</span>`;
+                        }
+
+                        parent.appendChild(tag);
+                    }
+                });
+            } catch (e) {
+                console.error("❌ [Content] Extraction Error:", e);
+            }
         };
+
+        if (img.complete && img.naturalHeight !== 0) {
+            setTimeout(attemptScan, 1000);
+        } else {
+            img.onload = () => setTimeout(attemptScan, 1000);
+        }
     });
 }
 
-// Update the observer to run this too
-const finalObserver = new MutationObserver((mutations) => {
-    clearTimeout(window.scanTimeoutFull);
-    window.scanTimeoutFull = setTimeout(() => {
+// ======================================================================
+// 4. MASTER MUTATION OBSERVER
+// ======================================================================
+const masterObserver = new MutationObserver((mutations) => {
+    clearTimeout(window.masterScanTimeout);
+    window.masterScanTimeout = setTimeout(() => {
         scanTelegramLinks();
         scanTelegramVoiceMessages();
-        scanTelegramImagesForQR(); // <--- Added the QR scanner
-    }, 500);
+        scanTelegramImagesForQR();
+    }, 1000);
 });
-finalObserver.observe(document.body, { childList: true, subtree: true });
+
+masterObserver.observe(document.body, { childList: true, subtree: true });
+
+setTimeout(() => {
+    scanTelegramLinks();
+    scanTelegramVoiceMessages();
+    scanTelegramImagesForQR();
+}, 1500);

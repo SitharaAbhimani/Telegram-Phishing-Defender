@@ -1,20 +1,14 @@
+// offscreen.js - Acts as a bridge between background.js and sandbox.js
 const sandbox = document.getElementById('ai-sandbox');
 let pendingRequests = {};
 
-// Receive from Background
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.target !== 'offscreen') return false;
 
-    if (message.action === 'predict_url') {
+    if (message.action === 'predict_url' || message.action === 'process_qr') {
         const reqId = Date.now().toString() + Math.random().toString();
         pendingRequests[reqId] = sendResponse;
-        sandbox.contentWindow.postMessage({ id: reqId, action: 'predict_url', url: message.url }, '*');
-        return true;
-    }
-    else if (message.action === 'process_qr') {
-        const reqId = Date.now().toString() + Math.random().toString();
-        pendingRequests[reqId] = sendResponse;
-        sandbox.contentWindow.postMessage({ id: reqId, action: 'process_qr', imageUrl: message.imageUrl }, '*');
+        sandbox.contentWindow.postMessage({ id: reqId, action: message.action, url: message.url, imageUrl: message.imageUrl }, '*');
         return true;
     }
     else if (message.action === 'start_listening') {
@@ -23,48 +17,44 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 });
 
-// Receive from Sandbox and send to Background
 window.addEventListener('message', (event) => {
     const data = event.data;
-
     if (data.type === 'voice_result') {
-        chrome.runtime.sendMessage({
-            action: 'voice_result_ready',
-            status: data.status,
-            confidence: data.confidence
-        });
+        chrome.runtime.sendMessage({ action: 'voice_result_ready', status: data.status, confidence: data.confidence });
         return;
     }
-
     if (data.id && pendingRequests[data.id]) {
         if (data.qrData !== undefined) {
-            if (data.qrData) {
-                chrome.runtime.sendMessage({ action: "check_url", url: data.qrData }, (res) => {
-                    pendingRequests[data.id](res);
-                    delete pendingRequests[data.id];
-                });
-            } else {
-                pendingRequests[data.id]({ status: "NO_QR" });
-                delete pendingRequests[data.id];
-            }
-        }
-        else if (data.status) {
+            pendingRequests[data.id]({ qrData: data.qrData });
+        } else if (data.status) {
             pendingRequests[data.id](data);
-            delete pendingRequests[data.id];
         }
+        delete pendingRequests[data.id];
     }
 });
 
-// Mic Processing
 async function startVoiceAI() {
     try {
+        console.log("🎤 [Offscreen] Requesting Microphone access...");
         const mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         const audioContext = new AudioContext({ sampleRate: 22050 });
+
+        // If AudioContext is suspended by the browser, it will be resumed.
+        if (audioContext.state === 'suspended') {
+            await audioContext.resume();
+        }
+
         const source = audioContext.createMediaStreamSource(mediaStream);
         let mfccFeatures = [];
 
-        const meydaAnalyzer = Meyda.createAnalyzer({
-            "audioContext": audioContext, "source": source, "bufferSize": 512, "featureExtractors": ["mfcc"],
+        console.log("👂 [Offscreen] Listening for 7 seconds...");
+
+        // 🔥 This is where the change happened! createMeydaAnalyze instead of createAnalyzer.
+        const meydaAnalyzer = Meyda.createMeydaAnalyzer({
+            "audioContext": audioContext,
+            "source": source,
+            "bufferSize": 512,
+            "featureExtractors": ["mfcc"],
             "callback": (features) => {
                 if (features && features.mfcc) {
                     let currentMfcc = features.mfcc;
@@ -83,9 +73,15 @@ async function startVoiceAI() {
             audioContext.close();
 
             if (mfccFeatures.length > 0) {
-                // Send MFCC arrays to Sandbox for prediction
+                console.log(`📤 [Offscreen] Sending ${mfccFeatures.length} voice frames to Sandbox.`);
                 sandbox.contentWindow.postMessage({ action: 'predict_voice', features: mfccFeatures }, '*');
+            } else {
+                console.error("❌ [Offscreen] No audio features captured! Did you play the audio?");
+                chrome.runtime.sendMessage({ action: 'voice_result_ready', status: "ERROR", confidence: 0 });
             }
         }, 7000);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+        console.error("❌ [Offscreen] Microphone Error:", e);
+        chrome.runtime.sendMessage({ action: 'voice_result_ready', status: "ERROR", confidence: 0 });
+    }
 }

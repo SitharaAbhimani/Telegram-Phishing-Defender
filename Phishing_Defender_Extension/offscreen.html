@@ -1,10 +1,21 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
+
 <head>
+    <meta charset="UTF-8">
+    <title>Offscreen Processing</title>
+
+    <!-- 1. Load the Meyda library FIRST for audio processing -->
+    <!-- This must be loaded before offscreen.js -->
     <script src="libs/meyda.min.js"></script>
 </head>
+
 <body>
-    <iframe id="ai-sandbox" src="sandbox.html" style="display:none;"></iframe>
+    <!-- 2. Sandbox iframe for secure TensorFlow.js processing -->
+    <iframe id="ai-sandbox" src="sandbox.html" style="display: none;"></iframe>
+
+    <!-- 3. Load the main offscreen script AFTER the libraries -->
     <script src="offscreen.js"></script>
 </body>
+
 </html>

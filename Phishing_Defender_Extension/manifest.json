@@ -5,11 +5,13 @@
     "description": "Auto-scans URLs and Voice messages natively inside Telegram Web.",
     "permissions": [
         "storage",
+        "unlimitedStorage",
         "offscreen"
     ],
     "host_permissions": [
         "*://web.telegram.org/*"
     ],
+    "options_page": "options.html",
     "background": {
         "service_worker": "background.js"
     },
@@ -34,5 +36,17 @@
     ],
     "content_security_policy": {
         "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
-    }
+    },
+    "web_accessible_resources": [
+        {
+            "resources": [
+                "models/*",
+                "models/tfjs_model_url/*",
+                "models/tfjs_model_voice/*"
+            ],
+            "matches": [
+                "<all_urls>"
+            ]
+        }
+    ]
 }

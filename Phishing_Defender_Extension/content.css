@@ -37,11 +37,16 @@
     }
 }
 
-/* Hide Telegram Link Preview  */
-.web-page,
+/* 🔥 Super Strong Rule to Hide All Telegram Link Previews 🔥 */
 .WebPage,
-.MessageMedia,
+.web-page,
+.LinkPreview,
+.link-preview,
+.link-preview-wrapper,
+.MessageMedia--webpage,
 .message-media,
-.link-preview {
+.is-webpage,
+div[class^="LinkPreview"],
+div[class^="WebPage"] {
     display: none !important;
 }
