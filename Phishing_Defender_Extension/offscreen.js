@@ -19,6 +19,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 window.addEventListener('message', (event) => {
     const data = event.data;
+
+    // 🚀 FL UPDATE: Listen for weights from sandbox and forward to background.js
+    if (data.type === 'federated_weights') {
+        chrome.runtime.sendMessage({ 
+            action: 'trigger_fl_upload', 
+            modelType: data.modelType, 
+            weights: data.weights 
+        });
+        return;
+    }
+
     if (data.type === 'voice_result') {
         chrome.runtime.sendMessage({ action: 'voice_result_ready', status: data.status, confidence: data.confidence });
         return;
@@ -49,7 +60,6 @@ async function startVoiceAI() {
 
         console.log("👂 [Offscreen] Listening for 7 seconds...");
 
-        // 🔥 This is where the change happened! createMeydaAnalyze instead of createAnalyzer.
         const meydaAnalyzer = Meyda.createMeydaAnalyzer({
             "audioContext": audioContext,
             "source": source,

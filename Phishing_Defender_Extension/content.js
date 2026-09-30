@@ -38,13 +38,13 @@ function scanTelegramLinks() {
 
             if (response.status === "SAFE") {
                 tag.className = 'ai-defender-tag ai-safe';
-                tag.innerText = `✅ Safe`;
+                tag.innerText = "✅ Safe";
             } else if (response.status === "PHISHING") {
                 tag.className = 'ai-defender-tag ai-phish';
-                tag.innerText = `🚨 Phishing`;
+                tag.innerText = "🚨 Phishing";
             } else if (response.status === "LOADING") {
                 tag.className = 'ai-defender-tag ai-loading';
-                tag.innerText = `⏳ Loading...`;
+                tag.innerText = "⏳ Loading...";
                 setTimeout(() => {
                     tag.remove();
                     link.classList.remove('ai-scanned');
@@ -60,7 +60,6 @@ function scanTelegramLinks() {
 // 2. VOICE MESSAGE SCANNER IN TELEGRAM
 // ======================================================================
 function scanTelegramVoiceMessages() {
-    // 🔥 Added '.media-document', '.document', '.File' to catch audio files sent as documents
     const voiceContainers = document.querySelectorAll('.audio, .voice-message, audio, .document-audio, .message-document, .media-audio, .media-document, .document, .File');
 
     voiceContainers.forEach(container => {
@@ -78,7 +77,7 @@ function scanTelegramVoiceMessages() {
         scanBtn.style.borderRadius = '5px';
         scanBtn.style.color = 'white';
         scanBtn.style.fontWeight = 'bold';
-        scanBtn.style.display = 'block'; // Ensure it goes to a new line
+        scanBtn.style.display = 'block';
 
         if (container.parentNode) {
             container.parentNode.insertBefore(scanBtn, container.nextSibling);
@@ -86,25 +85,55 @@ function scanTelegramVoiceMessages() {
 
         scanBtn.addEventListener('click', (e) => {
             e.preventDefault();
-            scanBtn.innerText = 'Listening... Play Audio! (7s)';
+            scanBtn.innerText = '⏳ Scanning... (Audio Playing)';
             scanBtn.style.backgroundColor = '#95a5a6';
 
-            chrome.runtime.sendMessage({ action: "start_voice_scan" });
+            let playBtn = container.querySelector('.document-action-btn, .media-play-button, .play, .audio-play, [class*="play"], [class*="Play"]');
+
+            if (!playBtn && container.parentNode) {
+                playBtn = container.parentNode.querySelector('.document-action-btn, .media-play-button, .play, .audio-play, [class*="play"], [class*="Play"]');
+            }
+
+            if (playBtn) {
+                console.log("▶️ [AI Defender] Auto-playing Telegram Audio for scanning...");
+                playBtn.click();
+            } else {
+                console.log("⚠️ [AI Defender] Play button not found. Please click Play manually!");
+                scanBtn.innerText = 'Listening... Click Play Manually!';
+            }
+
+            chrome.runtime.sendMessage({ action: "start_voice_scan" }, (response) => {
+                if (chrome.runtime.lastError) {
+                    console.error("❌ [AI Defender] Background Error:", chrome.runtime.lastError.message);
+                    scanBtn.innerText = '❌ Error (Check Console)';
+                    scanBtn.style.backgroundColor = '#e74c3c';
+                }
+            });
+
+            setTimeout(() => {
+                if (scanBtn.innerText.includes('Scanning') || scanBtn.innerText.includes('Listening')) {
+                    scanBtn.innerText = '❌ Timeout (Try Again)';
+                    scanBtn.style.backgroundColor = '#e74c3c';
+                    console.log("⏳ [AI Defender] Scan timed out. No response from background.js.");
+                }
+            }, 40000);
         });
     });
 }
 
-// Listen for the final voice analysis results
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "voice_result_ready") {
         const activeBtns = document.querySelectorAll('.ai-defender-tag');
         activeBtns.forEach(btn => {
-            if (btn.innerText.includes('Listening')) {
+            if (btn.innerText.includes('Scanning') || btn.innerText.includes('Listening')) {
                 if (request.status === "SAFE") {
-                    btn.innerText = `✅ Safe Voice`;
+                    btn.innerText = "✅ Safe Voice";
                     btn.style.backgroundColor = '#27ae60';
                 } else if (request.status === "PHISHING") {
-                    btn.innerText = `🚨 Phishing Scam!`;
+                    btn.innerText = "🚨 Phishing Scam!";
+                    btn.style.backgroundColor = '#e74c3c';
+                } else {
+                    btn.innerText = "❌ Scan Error";
                     btn.style.backgroundColor = '#e74c3c';
                 }
             }
@@ -113,7 +142,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 // ======================================================================
-// 3. QR CODE IMAGE SCANNER (Final UI with Decoded URL Display)
+// 3. QR CODE IMAGE SCANNER
 // ======================================================================
 function scanTelegramImagesForQR() {
     const images = document.querySelectorAll('img:not(.ai-qr-scanned)');
@@ -156,19 +185,19 @@ function scanTelegramImagesForQR() {
                     if (parent) {
                         parent.style.position = 'relative';
 
-                        // Format the extracted URL to show inside the tag
                         let displayUrl = res.url ? res.url : "Scanned Link";
                         if (displayUrl.length > 30) displayUrl = displayUrl.substring(0, 30) + '...';
 
+                        // Markdown UI break agade iralu escape characters balasiddeve
                         if (res.status === "PHISHING") {
                             img.style.border = "5px solid #e74c3c";
                             img.style.filter = "blur(5px)";
                             tag.style.backgroundColor = '#e74c3c';
-                            tag.innerHTML = `🚨 Phishing QR!<br><span style="font-size:11px; font-weight:normal; opacity:0.9;">${displayUrl}</span>`;
+                            tag.innerHTML = "🚨 Phishing QR!\x3Cbr\x3E\x3Cspan style='font-size:11px; font-weight:normal; opacity:0.9;'\x3E" + displayUrl + "\x3C/span\x3E";
                         } else if (res.status === "SAFE") {
                             img.style.border = "5px solid #27ae60";
                             tag.style.backgroundColor = '#27ae60';
-                            tag.innerHTML = `✅ Safe QR<br><span style="font-size:11px; font-weight:normal; opacity:0.9;">${displayUrl}</span>`;
+                            tag.innerHTML = "✅ Safe QR\x3Cbr\x3E\x3Cspan style='font-size:11px; font-weight:normal; opacity:0.9;'\x3E" + displayUrl + "\x3C/span\x3E";
                         }
 
                         parent.appendChild(tag);

@@ -9,7 +9,9 @@
         "offscreen"
     ],
     "host_permissions": [
-        "*://web.telegram.org/*"
+        "*://*.telegram.org/*",
+        "http://127.0.0.1:8000/*",
+        "http://localhost:8000/*"
     ],
     "options_page": "options.html",
     "background": {

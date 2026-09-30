@@ -130,37 +130,80 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 
     else if (request.action === "voice_result_ready") {
+        console.log("🎙️ [AI Defender] Voice Scan Result: " + request.status);
+
+        if (request.status === "ERROR") {
+            console.warn("⚠️ [AI Defender] Voice scan failed! Opening offscreen.html to grant Microphone permission.");
+            chrome.tabs.create({ url: chrome.runtime.getURL('offscreen.html') });
+        }
+
         saveToLocalFederatedStorage('voice', "voice_data", request.status === "PHISHING" ? 1 : 0);
         chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
             if (tabs[0]) chrome.tabs.sendMessage(tabs[0].id, request);
         });
+
+        sendResponse({ success: true });
+        return true;
+    }
+
+    else if (request.action === "trigger_fl_upload") {
+        console.log("🚀 [FL] Received " + request.modelType + " weights from Sandbox! Forwarding to server...");
+        sendWeightsToServer(request.modelType, request.weights, 1);
+        sendResponse({ success: true });
         return true;
     }
 });
 
 // ======================================================================
-// 5. FEDERATED LEARNING - SERVER COMMUNICATION 
+// 5. FEDERATED LEARNING - SERVER COMMUNICATION (FIXED & IMPROVED)
 // ======================================================================
-const FL_SERVER_URL = "http://127.0.0.1:8000";
+const FL_SERVER_URL = "https://phishing-defender-api-apgqgqfuczeccjh7.uaenorth-01.azurewebsites.net/";
 const CLIENT_ID = "client_" + Math.random().toString(36).substr(2, 9);
 
 async function sendWeightsToServer(modelType, weightsArray, sampleCount) {
     try {
-        console.log(`⏳ [FL] Sending ${modelType} weights...`);
-        const response = await fetch(`${FL_SERVER_URL}/api/weights/upload`, {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ client_id: CLIENT_ID, model_type: modelType, weights: weightsArray, data_samples_count: sampleCount })
+        console.log("⏳ [FL] Sending " + modelType + " weights...");
+
+        const payload = {
+            client_id: CLIENT_ID,
+            model_type: modelType,
+            weights: weightsArray,
+            data_samples_count: sampleCount
+        };
+
+        const response = await fetch(FL_SERVER_URL + "/api/weights/upload", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
         });
-        if (response.ok) console.log(`✅ [FL] Successfully sent ${modelType} weights!`);
-    } catch (error) { console.error(`❌ [FL] Failed to connect to server.`, error); }
+
+
+        if (response.ok) {
+            console.log("✅ [FL] Successfully sent " + modelType + " weights to Server!");
+        } else {
+            const errText = await response.text();
+            console.error("❌ [FL] Backend Rejected Data! Status: " + response.status, errText);
+        }
+    } catch (error) {
+        console.error("❌ [FL] Failed to connect to server.", error);
+    }
 }
 self.sendWeightsToServer = sendWeightsToServer;
 
 async function fetchGlobalModel(modelType) {
     try {
-        const response = await fetch(`${FL_SERVER_URL}/api/weights/global/${modelType}`, { method: "GET", headers: { "Content-Type": "application/json" } });
+        // 🔥 FIXED: String Concatenation Issue
+        const response = await fetch(FL_SERVER_URL + "/api/weights/global/" + modelType, {
+            method: "GET",
+            headers: { "Content-Type": "application/json" }
+        });
+
         const result = await response.json();
-        if (result.weights && result.weights.length > 0) console.log(`✅ [FL] Received global ${modelType} model!`);
-    } catch (error) { console.error(`❌ [FL] Failed to fetch global model.`, error); }
+        if (result.weights && result.weights.length > 0) {
+            console.log("✅ [FL] Received global " + modelType + " model!");
+        }
+    } catch (error) {
+        console.error("❌ [FL] Failed to fetch global model.", error);
+    }
 }
 self.fetchGlobalModel = fetchGlobalModel;

@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+motor
+certifi
+numpy
+pydantic
